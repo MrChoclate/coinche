@@ -11,7 +11,7 @@ task("linkJs") {
             copy {
                 includeEmptyDirs = false
                 from(zipTree(file.absolutePath))
-                into main.output.classesDir.absolutePath + "/lib"
+                into main.output.classesDirs.absolutePath + "/lib"
                 include { fileTreeElement ->
                     def path = fileTreeElement.path
                     def isJsFile = path.endsWith(".js")

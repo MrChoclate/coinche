@@ -65,6 +65,8 @@ data class Round(
     fun updateStartingPosition(position: Position): Round = copy(startingPosition = position)
 
     fun addPoints(points: Score): Round = copy(currentPoints = currentPoints + points)
+
+    fun biddingIsOver() = biddingSteps.size >= 4 && biddingSteps.takeLast(3).any { it.second == Pass }
 }
 
 fun Round.isNotDone(): Boolean = !isDone()
@@ -101,3 +103,68 @@ data class Game(
 }
 
 fun Game.isNotDone(): Boolean = !isDone()
+
+fun Game.doBidding(biddingStep: BiddingStep): Game {
+    val biddingSteps = currentRound.biddingSteps
+    val speaker = firstToPlay + biddingSteps.size
+    val decision = speaker to biddingStep
+    validateNewBiddingStep(decision, speaker)
+
+    return updateCurrentRound(currentRound.copy(biddingSteps = biddingSteps + decision))
+}
+
+fun Game.playCard(card: Card): Game {
+    require(card in playableCards(currentTrick, currentRound.bid.suit))
+    val advancedTrick = advanceTrick(currentTrick, currentRound.bid.suit, card)
+    return updateCurrentTrick(advancedTrick)
+}
+
+fun validateNewBiddingStep(
+    decision: Pair<Position, BiddingStep>,
+    speaker: Position
+) {
+    if (decision is Bid && decision.coincheStatus == CoincheStatus.NONE)
+        require(decision.position == speaker)
+}
+
+fun playableCards(trick: Trick, trumpSuit: Suit): Set<Card> {
+    if (trick.isDone()) return emptySet()
+
+    val trickCards = trick.cards
+    val playerHand = trick.currentPlayer!!.hand
+
+    if (trickCards.isEmpty()) return playerHand
+
+    val askedSuit = trickCards.first().suit
+    val playerCardsOfAskedSuit = playerHand.filter { it.suit == askedSuit }.toSet()
+
+    val trickTrumpCards = trickCards.filter { it.suit == trumpSuit }.sortedBy { it.rank.trumpValue }
+
+    val playerTrumpCards = playerHand.filter { it.suit == trumpSuit }.toSet()
+
+    if (trickTrumpCards.isEmpty()) {
+        if (playerCardsOfAskedSuit.isNotEmpty()) return playerCardsOfAskedSuit
+
+        if (partnerIsWinningTrick(trick, trumpSuit)) return playerHand
+
+        if (playerTrumpCards.isNotEmpty()) return playerTrumpCards
+
+        return playerHand
+    }
+
+    val bestPlayedTrump = trickTrumpCards.first()
+
+    val playerBetterTrumpCards = playerTrumpCards
+        .filter { it.isBetterThan(bestPlayedTrump, trumpSuit) }
+        .toSet()
+
+    if (askedSuit == trumpSuit && playerBetterTrumpCards.isNotEmpty()) return playerBetterTrumpCards
+
+    if (playerCardsOfAskedSuit.isNotEmpty()) return playerCardsOfAskedSuit
+
+    if (partnerIsWinningTrick(trick, trumpSuit)) return playerHand
+
+    if (playerBetterTrumpCards.isNotEmpty()) return playerBetterTrumpCards
+
+    return playerHand
+}
